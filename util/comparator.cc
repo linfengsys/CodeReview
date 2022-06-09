@@ -28,6 +28,7 @@ class BytewiseComparatorImpl : public Comparator {
     return a.compare(b);
   }
 
+  // 节约endkey的size，节约内存存储空间
   void FindShortestSeparator(std::string* start,
                              const Slice& limit) const override {
     // Find length of common prefix

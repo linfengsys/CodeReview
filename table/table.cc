@@ -32,9 +32,11 @@ struct Table::Rep {
   const char* filter_data;
 
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
+  // index block就是普通的block格式
   Block* index_block;
 };
 
+// open table主要是把meta(包括Index block & meta index block)数据读到cache
 Status Table::Open(const Options& options, RandomAccessFile* file,
                    uint64_t size, Table** table) {
   *table = nullptr;
@@ -53,6 +55,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
   if (!s.ok()) return s;
 
   // Read the index block
+  // Open Table的核心是读出sstable中的meta部分，缓存起来，其实就是file指针和index_block, metaindex_handle
   BlockContents index_block_contents;
   ReadOptions opt;
   if (options.paranoid_checks) {
@@ -157,6 +160,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
   Block* block = nullptr;
   Cache::Handle* cache_handle = nullptr;
 
+  // block handle指block的元数据，其实就是block在sst中的位置(offset, len)
   BlockHandle handle;
   Slice input = index_value;
   Status s = handle.DecodeFrom(&input);
@@ -167,13 +171,17 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
     BlockContents contents;
     if (block_cache != nullptr) {
       char cache_key_buffer[16];
+      // block cache key: table_id + block_offset
       EncodeFixed64(cache_key_buffer, table->rep_->cache_id);
       EncodeFixed64(cache_key_buffer + 8, handle.offset());
       Slice key(cache_key_buffer, sizeof(cache_key_buffer));
+      // 首先尝试从block cache里面查询
       cache_handle = block_cache->Lookup(key);
       if (cache_handle != nullptr) {
+        // 如果cache命中，直接返回
         block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
       } else {
+        // 否则从sstable文件中读出block，并且加入到block cache
         s = ReadBlock(table->rep_->file, options, handle, &contents);
         if (s.ok()) {
           block = new Block(contents);
@@ -191,6 +199,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
     }
   }
 
+  // 返回block对应的迭代器
   Iterator* iter;
   if (block != nullptr) {
     iter = block->NewIterator(table->rep_->options.comparator);
@@ -205,26 +214,33 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
   return iter;
 }
 
+// l0层的sstable file的迭代器
 Iterator* Table::NewIterator(const ReadOptions& options) const {
   return NewTwoLevelIterator(
       rep_->index_block->NewIterator(rep_->options.comparator),
       &Table::BlockReader, const_cast<Table*>(this), options);
 }
 
+// get的核心实现
 Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
                           void (*handle_result)(void*, const Slice&,
                                                 const Slice&)) {
   Status s;
+  // 首先通过sstable的index_block构造一个迭代器，然后seek到slice对应的block
+  // 这样能获取到block在sst中的位置
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+  // 根据key seek到index block对应位置，获取data block的handle
   iiter->Seek(k);
   if (iiter->Valid()) {
     Slice handle_value = iiter->value();
     FilterBlockReader* filter = rep_->filter;
     BlockHandle handle;
+    // 尝试从bloom filter初筛，如果确认没有，直接返回
     if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
         !filter->KeyMayMatch(handle.offset(), k)) {
       // Not found
     } else {
+      // 根据block的元数据(blockHandle)，读取block内容
       Iterator* block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
       if (block_iter->Valid()) {

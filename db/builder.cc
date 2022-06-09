@@ -31,8 +31,10 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
     TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     Slice key;
+    // dump memory 或者 合并sst
     for (; iter->Valid(); iter->Next()) {
       key = iter->key();
+      // 每次add一个Key-value的时候，需要更新对应的data index，meta index block(filter data)
       builder->Add(key, iter->value());
     }
     if (!key.empty()) {
@@ -40,6 +42,7 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
     }
 
     // Finish and check for builder errors
+    // 一次性把sstable所有的数据写完
     s = builder->Finish();
     if (s.ok()) {
       meta->file_size = builder->FileSize();

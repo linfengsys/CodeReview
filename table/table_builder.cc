@@ -40,11 +40,14 @@ struct TableBuilder::Rep {
   WritableFile* file;
   uint64_t offset;
   Status status;
+  // data block 和 index block都是通过block builder来构建
+  // 这两者在物理存储逻辑上没什么区别，也有key share prefix 
   BlockBuilder data_block;
   BlockBuilder index_block;
   std::string last_key;
   int64_t num_entries;
   bool closed;  // Either Finish() or Abandon() has been called.
+  // filter block的构建跟 data block和index block有区别
   FilterBlockBuilder* filter_block;
 
   // We do not emit the index entry for a block until we have seen the
@@ -99,29 +102,37 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);
   }
 
+  // 利用pending_index_entry来表示下一个block开始的时候，才需要将上一个block的index写下去
   if (r->pending_index_entry) {
     assert(r->data_block.empty());
     r->options.comparator->FindShortestSeparator(&r->last_key, key);
     std::string handle_encoding;
     r->pending_handle.EncodeTo(&handle_encoding);
+    // index block增加一条entry, key是block的last key, value=block handle
     r->index_block.Add(r->last_key, Slice(handle_encoding));
     r->pending_index_entry = false;
   }
 
   if (r->filter_block != nullptr) {
+    // 同步修改filter block
     r->filter_block->AddKey(key);
   }
 
   r->last_key.assign(key.data(), key.size());
   r->num_entries++;
+  // 同步修改data block
   r->data_block.Add(key, value);
 
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
+  
+  // 如果当前data block的size到达设置的limit，比如4k，就flush
+  // flush其实就是：将内存的数据写到文件里面去(也就是data block)
   if (estimated_block_size >= r->options.block_size) {
     Flush();
   }
 }
 
+// 可以思考下: leveldb的层次结构
 void TableBuilder::Flush() {
   Rep* r = rep_;
   assert(!r->closed);
@@ -150,6 +161,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   Slice block_contents;
   CompressionType type = r->options.compression;
   // TODO(postrelease): Support more compression options: zlib?
+  // leveldb还支持文件数据的压缩，nb
   switch (type) {
     case kNoCompression:
       block_contents = raw;
@@ -169,6 +181,9 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       break;
     }
   }
+
+  // 这里面拿到block的content（所有的entry list，包括restart points）
+  // 同时在每个block的结尾加上：compression type 和 crc校验
   WriteRawBlock(block_contents, type, handle);
   r->compressed_output.clear();
   block->Reset();
@@ -212,6 +227,8 @@ Status TableBuilder::Finish() {
   // Write metaindex block
   if (ok()) {
     BlockBuilder meta_index_block(&r->options);
+    // 如果开启filter功能，创建meta index block，记录filter block的位置
+    // filter block只有一个，所以记录只有一条
     if (r->filter_block != nullptr) {
       // Add mapping from "filter.Name" to location of filter data
       std::string key = "filter.";
@@ -227,6 +244,7 @@ Status TableBuilder::Finish() {
 
   // Write index block
   if (ok()) {
+    // default = false, true表示之前有data block写下去了，需要增加一个index entry
     if (r->pending_index_entry) {
       r->options.comparator->FindShortSuccessor(&r->last_key);
       std::string handle_encoding;

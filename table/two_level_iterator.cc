@@ -15,6 +15,10 @@ namespace {
 
 typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&);
 
+// 这个是sstable的迭代器
+// index_iter是sstable meta里面的meta_index, 已经封装成block_iterator(参考block.cc)
+// block的处理函数hook的是blockReader(table.cc)
+
 class TwoLevelIterator : public Iterator {
  public:
   TwoLevelIterator(Iterator* index_iter, BlockFunction block_function,
@@ -79,8 +83,11 @@ TwoLevelIterator::TwoLevelIterator(Iterator* index_iter,
 
 TwoLevelIterator::~TwoLevelIterator() = default;
 
+// 借助seek，看看如何实现two level的iterator
 void TwoLevelIterator::Seek(const Slice& target) {
+  // 通过block iterator定位block meta index (offset, len)
   index_iter_.Seek(target);
+  // 获取block内容的iterator
   InitDataBlock();
   if (data_iter_.iter() != nullptr) data_iter_.Seek(target);
   SkipEmptyDataBlocksForward();
@@ -143,6 +150,8 @@ void TwoLevelIterator::SetDataIterator(Iterator* data_iter) {
   data_iter_.Set(data_iter);
 }
 
+// 对sstable file迭代时，可能会跨多个data block，根据当前index_iter seek到对应的data block
+// 判断方法: 判断block handle是否相等就行
 void TwoLevelIterator::InitDataBlock() {
   if (!index_iter_.Valid()) {
     SetDataIterator(nullptr);
@@ -153,7 +162,9 @@ void TwoLevelIterator::InitDataBlock() {
       // data_iter_ is already constructed with this iterator, so
       // no need to change anything
     } else {
+      // block reader，返回data block iterator
       Iterator* iter = (*block_function_)(arg_, options_, handle);
+      // set current data block handle & data block iter
       data_block_handle_.assign(handle.data(), handle.size());
       SetDataIterator(iter);
     }

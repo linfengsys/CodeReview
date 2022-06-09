@@ -52,6 +52,7 @@ void BlockBuilder::Reset() {
   last_key_.clear();
 }
 
+// current size计算方法
 size_t BlockBuilder::CurrentSizeEstimate() const {
   return (buffer_.size() +                       // Raw data buffer
           restarts_.size() * sizeof(uint32_t) +  // Restart array
@@ -75,8 +76,12 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   assert(buffer_.empty()  // No values yet?
          || options_->comparator->Compare(key, last_key_piece) > 0);
   size_t shared = 0;
+
+  // 计算如何保存本次的key-value
+  // 如果还没到达restart点，需要prefix shared
   if (counter_ < options_->block_restart_interval) {
     // See how much sharing to do with previous string
+    // 这个注释也不是natvie English???
     const size_t min_length = std::min(last_key_piece.size(), key.size());
     while ((shared < min_length) && (last_key_piece[shared] == key[shared])) {
       shared++;
@@ -88,6 +93,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   }
   const size_t non_shared = key.size() - shared;
 
+  // key-value最终格式 key shared size | key unshared size | value size | key | value
   // Add "<shared><non_shared><value_size>" to buffer_
   PutVarint32(&buffer_, shared);
   PutVarint32(&buffer_, non_shared);

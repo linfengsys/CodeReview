@@ -133,6 +133,7 @@ class Limiter {
 //
 // Instances of this class are thread-friendly but not thread-safe, as required
 // by the SequentialFile API.
+// sequential Read 与 Random Read的主要区别在于 read / pread(seek + read atomic)
 class PosixSequentialFile final : public SequentialFile {
  public:
   PosixSequentialFile(std::string filename, int fd)
@@ -142,6 +143,7 @@ class PosixSequentialFile final : public SequentialFile {
   Status Read(size_t n, Slice* result, char* scratch) override {
     Status status;
     while (true) {
+      // here invoke read
       ::ssize_t read_size = ::read(fd_, scratch, n);
       if (read_size < 0) {  // Read error.
         if (errno == EINTR) {
@@ -209,6 +211,7 @@ class PosixRandomAccessFile final : public RandomAccessFile {
     assert(fd != -1);
 
     Status status;
+    // here invoke pread
     ssize_t read_size = ::pread(fd, scratch, n, static_cast<off_t>(offset));
     *result = Slice(scratch, (read_size < 0) ? 0 : read_size);
     if (read_size < 0) {
@@ -274,6 +277,8 @@ class PosixMmapReadableFile final : public RandomAccessFile {
   const std::string filename_;
 };
 
+// write只支持 append，leveldb中没有random write
+// 但是要支持buffer / sync
 class PosixWritableFile final : public WritableFile {
  public:
   PosixWritableFile(std::string filename, int fd)
@@ -570,6 +575,7 @@ class PosixEnv : public Env {
     return status;
   }
 
+  // O_TRUNC: open时会将之前的文件内容丢弃(如果存在)
   Status NewWritableFile(const std::string& filename,
                          WritableFile** result) override {
     int fd = ::open(filename.c_str(),
@@ -583,6 +589,7 @@ class PosixEnv : public Env {
     return Status::OK();
   }
 
+  // O_APPEND: write结束之后，文件指针移动到文件末尾
   Status NewAppendableFile(const std::string& filename,
                            WritableFile** result) override {
     int fd = ::open(filename.c_str(),

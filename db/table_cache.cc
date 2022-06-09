@@ -89,6 +89,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
   }
 
   Table* table = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
+  // two level iterator, 支持对sstable的迭代
   Iterator* result = table->NewIterator(options);
   result->RegisterCleanup(&UnrefEntry, cache_, handle);
   if (tableptr != nullptr) {
@@ -102,9 +103,12 @@ Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
                        void (*handle_result)(void*, const Slice&,
                                              const Slice&)) {
   Cache::Handle* handle = nullptr;
+  // table cache中首先找到table
+  // 如果cache里面没有缓存这个sstable，就从后端读取上来并cache住
   Status s = FindTable(file_number, file_size, &handle);
   if (s.ok()) {
     Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
+    // 调用table.cc的实现真正从block里读数据
     s = t->InternalGet(options, k, arg, handle_result);
     cache_->Release(handle);
   }

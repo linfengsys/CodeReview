@@ -53,6 +53,7 @@ class TableCache {
   Env* const env_;
   const std::string dbname_;
   const Options& options_;
+  // 复用LRU cache
   Cache* cache_;
 };
 

@@ -82,7 +82,8 @@ class DBImpl : public DB {
     bool done;
     const InternalKey* begin;  // null means beginning of key range
     const InternalKey* end;    // null means end of key range
-    InternalKey tmp_storage;   // Used to keep track of compaction progress
+    Interna
+    hhlKey tmp_storage;   // Used to keep track of compaction progress
   };
 
   // Per level compaction stats.  stats_[level] stores the stats for
@@ -171,6 +172,7 @@ class DBImpl : public DB {
   FileLock* db_lock_;
 
   // State below is protected by mutex_
+  // 全局只有一个latch
   port::Mutex mutex_;
   std::atomic<bool> shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
@@ -202,6 +204,7 @@ class DBImpl : public DB {
   // Have we encountered a background error in paranoid mode?
   Status bg_error_ GUARDED_BY(mutex_);
 
+  // 统计信息，compaction的状态是核心指标
   CompactionStats stats_[config::kNumLevels] GUARDED_BY(mutex_);
 };
 

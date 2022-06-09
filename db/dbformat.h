@@ -107,6 +107,7 @@ class InternalKeyComparator : public Comparator {
   explicit InternalKeyComparator(const Comparator* c) : user_comparator_(c) {}
   const char* Name() const override;
   int Compare(const Slice& a, const Slice& b) const override;
+
   void FindShortestSeparator(std::string* start,
                              const Slice& limit) const override;
   void FindShortSuccessor(std::string* key) const override;

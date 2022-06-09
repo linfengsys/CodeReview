@@ -11,6 +11,7 @@
 namespace leveldb {
 
 namespace {
+// MergingIter的实现也是非常优秀，可以参考
 class MergingIterator : public Iterator {
  public:
   MergingIterator(const Comparator* comparator, Iterator** children, int n)
@@ -74,6 +75,7 @@ class MergingIterator : public Iterator {
       direction_ = kForward;
     }
 
+    // 移动当前的迭代器，并且compare最小的
     current_->Next();
     FindSmallest();
   }
@@ -139,8 +141,11 @@ class MergingIterator : public Iterator {
   // For now we use a simple array since we expect a very small number
   // of children in leveldb.
   const Comparator* comparator_;
+  // 这里是所有的itetor，包括memory和sst的
+  // 本质上就是对这些数据做多路归并，也就是多个有序链表合并排序问题
   IteratorWrapper* children_;
   int n_;
+  // 当前的值在哪个child迭代器上
   IteratorWrapper* current_;
   Direction direction_;
 };

@@ -39,8 +39,12 @@ void WriteBatch::Clear() {
 
 size_t WriteBatch::ApproximateSize() const { return rep_.size(); }
 
+// 拼接成一条完整的record(checksum + length + type(FULL ...) + data)之后，开始对
+// 其中的data进行解析
+// data = (sequence number(8B) + entry count(4B) + entry1 + entry2 + ...)
 Status WriteBatch::Iterate(Handler* handler) const {
   Slice input(rep_);
+  // 
   if (input.size() < kHeader) {
     return Status::Corruption("malformed WriteBatch (too small)");
   }

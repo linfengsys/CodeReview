@@ -43,6 +43,8 @@ class BlockBuilder {
  private:
   const Options* options_;
   std::string buffer_;              // Destination buffer
+  // restart points的目的是，为了加速key的查询，如果没有这些point, 一次查询需要从fisrt entry, 一直apply到seek点
+  // 但是有restart points之后，可以首先binary search对应的key在那个range，然后再顺序查找一遍
   std::vector<uint32_t> restarts_;  // Restart points
   int counter_;                     // Number of entries emitted since restart
   bool finished_;                   // Has Finish() been called?

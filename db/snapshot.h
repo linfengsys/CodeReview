@@ -36,6 +36,7 @@ class SnapshotImpl : public Snapshot {
 #endif  // !defined(NDEBUG)
 };
 
+// snapshot本质上就是把History所有的version(sequence)记录下来
 class SnapshotList {
  public:
   SnapshotList() : head_(0) {

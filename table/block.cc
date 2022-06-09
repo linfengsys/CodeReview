@@ -17,15 +17,27 @@
 
 namespace leveldb {
 
+// block的物理存储格式，是自描述的
+// todo, data block和index block的格式一样？
+// 是的，其中的每一条Entry指向一个Data Block，其Key值为所指向的Data Block最后一条数据的Key
+// Value为指向该Data Block位置的Handle
+// 
 inline uint32_t Block::NumRestarts() const {
   assert(size_ >= sizeof(uint32_t));
   return DecodeFixed32(data_ + size_ - sizeof(uint32_t));
 }
 
+// block layout
+// entry1 | entry2 | entry3 ... | tail(restart point1 | restart point2 .... restart points num) 
+// | compression type | crc
+// 根据block contents初始化block数据
+// 包括: data, data size, restart point起始位置
+// 注意 size不包括compression type 和 crc
 Block::Block(const BlockContents& contents)
     : data_(contents.data.data()),
       size_(contents.data.size()),
       owned_(contents.heap_allocated) {
+  // 去掉一些异常的情况
   if (size_ < sizeof(uint32_t)) {
     size_ = 0;  // Error marker
   } else {
@@ -74,6 +86,8 @@ static inline const char* DecodeEntry(const char* p, const char* limit,
   return p;
 }
 
+// block迭代器封装，包括data block & index block
+// 两者统一处理了，index block也是会prefix share, 也会有restart point
 class Block::Iter : public Iterator {
  private:
   const Comparator* const comparator_;

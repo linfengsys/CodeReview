@@ -44,6 +44,7 @@ using leveldb::WritableFile;
 using leveldb::WriteBatch;
 using leveldb::WriteOptions;
 
+// leveldb对外封装的c接口
 extern "C" {
 
 struct leveldb_t {

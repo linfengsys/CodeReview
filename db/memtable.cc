@@ -73,6 +73,9 @@ class MemTableIterator : public Iterator {
 
 Iterator* MemTable::NewIterator() { return new MemTableIterator(&table_); }
 
+// memtable(skiplist) add 逻辑
+// 将userkey封装成internal key
+// 内存存储的时候，是一个变长描述方法
 void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
                    const Slice& value) {
   // Format of an entry is concatenation of:
@@ -83,18 +86,21 @@ void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
   //  value bytes  : char[value.size()]
   size_t key_size = key.size();
   size_t val_size = value.size();
-  size_t internal_key_size = key_size + 8;
+  size_t internal_key_size = key_size + 8; // 8bytes表示sequence + type
   const size_t encoded_len = VarintLength(internal_key_size) +
                              internal_key_size + VarintLength(val_size) +
                              val_size;
   char* buf = arena_.Allocate(encoded_len);
-  char* p = EncodeVarint32(buf, internal_key_size);
+  char* p = EncodeVarint32(buf, internal_key_size); // internal key size
   std::memcpy(p, key.data(), key_size);
   p += key_size;
+  // userkey后面加上 8bytes internal key
   EncodeFixed64(p, (s << 8) | type);
   p += 8;
   p = EncodeVarint32(p, val_size);
   std::memcpy(p, value.data(), val_size);
+
+  // 综上，memtable的entry格式为： internal_key_size + internal key  + value size + value
   assert(p + val_size == buf + encoded_len);
   table_.Insert(buf);
 }

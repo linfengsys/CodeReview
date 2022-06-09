@@ -148,6 +148,7 @@ class Version {
   VersionSet* vset_;  // VersionSet to which this Version belongs
   Version* next_;     // Next version in linked list
   Version* prev_;     // Previous version in linked list
+  // 某个version上只要有sstable文件(只读的)在被读，就ref上不能删除version上的文件
   int refs_;          // Number of live refs to this version
 
   // List of files per level
@@ -191,6 +192,7 @@ class VersionSet {
   uint64_t ManifestFileNumber() const { return manifest_file_number_; }
 
   // Allocate and return a new file number
+  // 所有new file的操作应该都是互斥的，所以这里不需要Lock
   uint64_t NewFileNumber() { return next_file_number_++; }
 
   // Arrange to reuse "file_number" unless a newer file number has
@@ -316,6 +318,9 @@ class VersionSet {
 };
 
 // A Compaction encapsulates information about a compaction.
+// compaction专用的数据结构，记录Input, output
+// compact过程中根据这个数据结构记录的信息控制compaction的过程
+// versionEdit记录version变化
 class Compaction {
  public:
   ~Compaction();
@@ -366,6 +371,8 @@ class Compaction {
   int level_;
   uint64_t max_output_file_size_;
   Version* input_version_;
+
+  // 记录compaction过程中meta信息的变化
   VersionEdit edit_;
 
   // Each compaction reads inputs from "level_" and "level_+1"

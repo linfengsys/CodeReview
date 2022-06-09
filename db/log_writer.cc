@@ -15,6 +15,7 @@ namespace log {
 
 static void InitTypeCrc(uint32_t* type_crc) {
   for (int i = 0; i <= kMaxRecordType; i++) {
+    // todo: why & when static_cast
     char t = static_cast<char>(i);
     type_crc[i] = crc32c::Value(&t, 1);
   }
@@ -31,6 +32,7 @@ Writer::Writer(WritableFile* dest, uint64_t dest_length)
 
 Writer::~Writer() = default;
 
+// 写一条完整的record(redo log || manifest)
 Status Writer::AddRecord(const Slice& slice) {
   const char* ptr = slice.data();
   size_t left = slice.size();
@@ -60,6 +62,7 @@ Status Writer::AddRecord(const Slice& slice) {
     const size_t fragment_length = (left < avail) ? left : avail;
 
     RecordType type;
+    // 当前block 完全够用
     const bool end = (left == fragment_length);
     if (begin && end) {
       type = kFullType;
@@ -93,6 +96,8 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
   // Compute the crc of the record type and the payload.
   uint32_t crc = crc32c::Extend(type_crc_[t], ptr, length);
   crc = crc32c::Mask(crc);  // Adjust for storage
+  // 由于disk是字节流，显然int的数字存储要以某种格式存储（转化为字节流),
+  // 可以snprintf，也可以fixed size，fixed size = 4bytes，相对更节约空间
   EncodeFixed32(buf, crc);
 
   // Write the header and the payload

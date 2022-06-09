@@ -18,6 +18,10 @@ void PutFixed64(std::string* dst, uint64_t value) {
   dst->append(buf, sizeof(buf));
 }
 
+// varint，根据数字的range，动态的决定长度
+// 核心思路： 128 = 10000000，如果某个bytes满足 < 128，这个byte的最高位一定是0
+// 相反varint里面设置这个数为1， decode的时候，根据每个byte的最高位是否为1来判断结束
+// 就是利用byte = 8bits的最高位来判断是否结束
 char* EncodeVarint32(char* dst, uint32_t v) {
   // Operate on characters as unsigneds
   uint8_t* ptr = reinterpret_cast<uint8_t*>(dst);

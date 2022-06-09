@@ -11,6 +11,9 @@
 namespace leveldb {
 namespace log {
 
+// redo log的格式与sst block不太一样
+// block的最后会有个checksum
+// redo log的每个record都有checksum
 enum RecordType {
   // Zero is reserved for preallocated files
   kZeroType = 0,

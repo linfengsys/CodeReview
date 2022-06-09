@@ -15,10 +15,15 @@ namespace leveldb {
 
 class VersionSet;
 
+// sstable file的元数据信息
 struct FileMetaData {
   FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) {}
 
   int refs;
+  // seek机制：错峰compaction, 优化compaction性能
+  // 引入seeks来估算更可能需要优先compaction的sstable file
+  // seeks的limit值如何设定？本质上要评估：seek带来的影响和compact的影响谁更大，考虑磁盘的写延时就能得到标准 = 
+  // 参考：https://leveldb-handbook.readthedocs.io/zh/latest/compaction.html
   int allowed_seeks;  // Seeks allowed until compaction
   uint64_t number;
   uint64_t file_size;    // File size in bytes
@@ -26,6 +31,7 @@ struct FileMetaData {
   InternalKey largest;   // Largest internal key served by table
 };
 
+// 表示某一次操作之后，table整体version的变化
 class VersionEdit {
  public:
   VersionEdit() { Clear(); }
@@ -85,6 +91,7 @@ class VersionEdit {
 
   typedef std::set<std::pair<int, uint64_t>> DeletedFileSet;
 
+  // 记录日志状态的变化
   std::string comparator_;
   uint64_t log_number_;
   uint64_t prev_log_number_;
@@ -96,6 +103,7 @@ class VersionEdit {
   bool has_next_file_number_;
   bool has_last_sequence_;
 
+  // version edit 记录db的meta信息变化
   std::vector<std::pair<int, InternalKey>> compact_pointers_;
   DeletedFileSet deleted_files_;
   std::vector<std::pair<int, FileMetaData>> new_files_;

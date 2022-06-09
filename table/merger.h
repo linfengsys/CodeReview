@@ -18,6 +18,7 @@ class Iterator;
 // key is present in K child iterators, it will be yielded K times.
 //
 // REQUIRES: n >= 0
+// 多态之后，内部的实现完全可以不对外暴露，所以只需要暴露接口
 Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children,
                              int n);
 
